@@ -1,4 +1,5 @@
 import re
+import threading
 from abc import ABC, abstractmethod
 
 import phonemizer
@@ -7,6 +8,7 @@ from .normalizer import normalize_text
 from ...structures.schemas import NormalizationOptions
 
 phonemizers = {}
+_phonemizer_lock = threading.Lock()
 
 
 class PhonemizerBackend(ABC):
@@ -99,9 +101,10 @@ def phonemize(text: str, language: str = "a") -> str:
     # Strip input text first to remove problematic leading/trailing spaces
     text = text.strip()
     
-    if language not in phonemizers:
-        phonemizers[language] = create_phonemizer(language)
-    
-    result = phonemizers[language].phonemize(text)
+    with _phonemizer_lock:
+        if language not in phonemizers:
+            phonemizers[language] = create_phonemizer(language)
+
+        result = phonemizers[language].phonemize(text)
     # Final strip to ensure no leading/trailing spaces in phonemes
     return result.strip()

@@ -57,11 +57,19 @@ class StreamingAudioWriter:
             raise ValueError(f"Unsupported format: {self.format}") # Use self.format here
 
     def close(self):
-        if hasattr(self, "container"):
-            self.container.close()
+        if getattr(self, "container", None) is not None:
+            try:
+                self.container.close()
+            except Exception:
+                pass
+            self.container = None
 
-        if hasattr(self, "output_buffer"):
-            self.output_buffer.close()
+        if getattr(self, "output_buffer", None) is not None:
+            try:
+                self.output_buffer.close()
+            except Exception:
+                pass
+            self.output_buffer = None
 
     def write_chunk(
         self, audio_data: Optional[np.ndarray] = None, finalize: bool = False
@@ -75,19 +83,20 @@ class StreamingAudioWriter:
 
         if finalize:
             if self.format != "pcm":
-                # Flush stream encoder
-                packets = self.stream.encode(None)
-                for packet in packets:
-                    self.container.mux(packet)
+                if getattr(self, "container", None) is not None:
+                    # Flush stream encoder
+                    packets = self.stream.encode(None)
+                    for packet in packets:
+                        self.container.mux(packet)
 
-                # Closing the container handles writing the trailer and finalizing the file.
-                # No explicit flush method is available or needed here.
-                logger.debug("Muxed final packets.")
+                    # Closing the container handles writing the trailer and finalizing the file.
+                    logger.debug("Muxed final packets.")
 
-                # Get the final bytes from the buffer *before* closing it
-                data = self.output_buffer.getvalue()
-                self.close() # Close container and buffer
-                return data
+                    # Get the final bytes from the buffer *before* closing it
+                    data = self.output_buffer.getvalue()
+                    self.close() # Close container and buffer
+                    return data
+                return b""
 
         if audio_data is None or len(audio_data) == 0:
             return b""
@@ -96,6 +105,9 @@ class StreamingAudioWriter:
             # Write raw bytes
             return audio_data.tobytes()
         else:
+            if getattr(self, "container", None) is None:
+                return b""
+
             frame = av.AudioFrame.from_ndarray(
                 audio_data.reshape(1, -1),
                 format="s16",

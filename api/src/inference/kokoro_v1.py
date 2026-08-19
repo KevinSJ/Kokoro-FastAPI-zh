@@ -1,6 +1,7 @@
 """Clean Kokoro implementation with controlled resource management."""
 
 import os
+import threading
 from typing import AsyncGenerator, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -25,6 +26,7 @@ class KokoroV1(BaseModelBackend):
         self._device = settings.get_device()
         self._model: Optional[KModel] = None
         self._pipelines: Dict[str, KPipeline] = {}  # Store pipelines by lang_code
+        self._pipeline_lock = threading.Lock()
 
     async def load_model(self, path: str) -> None:
         """Load pre-baked model.
@@ -82,24 +84,25 @@ class KokoroV1(BaseModelBackend):
         if not self._model:
             raise RuntimeError("Model not loaded")
 
-        if lang_code == "z" and "a" not in self._pipelines:
-            logger.info("Creating helper English pipeline for mixed zh-en text")
-            self._pipelines["a"] = KPipeline(
-                lang_code="a", model=False, repo_id=settings.repo_id
-            )
+        with self._pipeline_lock:
+            if lang_code == "z" and "a" not in self._pipelines:
+                logger.info("Creating helper English pipeline for mixed zh-en text")
+                self._pipelines["a"] = KPipeline(
+                    lang_code="a", model=False, repo_id=settings.repo_id
+                )
 
-        if lang_code not in self._pipelines:
-            logger.info(f"Creating new pipeline for language code: {lang_code}")
-            pipeline_kwargs = {
-                "lang_code": lang_code,
-                "model": self._model,
-                "device": self._device,
-                "repo_id": settings.repo_id,
-            }
-            if lang_code == "z":
-                pipeline_kwargs["en_callable"] = self._en_callable
-            self._pipelines[lang_code] = KPipeline(**pipeline_kwargs)
-        return self._pipelines[lang_code]
+            if lang_code not in self._pipelines:
+                logger.info(f"Creating new pipeline for language code: {lang_code}")
+                pipeline_kwargs = {
+                    "lang_code": lang_code,
+                    "model": self._model,
+                    "device": self._device,
+                    "repo_id": settings.repo_id,
+                }
+                if lang_code == "z":
+                    pipeline_kwargs["en_callable"] = self._en_callable
+                self._pipelines[lang_code] = KPipeline(**pipeline_kwargs)
+            return self._pipelines[lang_code]
 
     async def generate_from_tokens(
         self,
@@ -177,9 +180,14 @@ class KokoroV1(BaseModelBackend):
             logger.debug(
                 f"Generating audio from tokens with lang_code '{pipeline_lang_code}': '{tokens[:100]}{'...' if len(tokens) > 100 else ''}'"
             )
-            for result in pipeline.generate_from_tokens(
-                tokens=tokens, voice=voice_path, speed=speed, model=self._model
-            ):
+            with self._pipeline_lock:
+                results = list(
+                    pipeline.generate_from_tokens(
+                        tokens=tokens, voice=voice_path, speed=speed, model=self._model
+                    )
+                )
+
+            for result in results:
                 if result.audio is not None:
                     logger.debug(f"Got audio chunk with shape: {result.audio.shape}")
                     yield result.audio.numpy()
@@ -278,9 +286,14 @@ class KokoroV1(BaseModelBackend):
             logger.debug(
                 f"Generating audio for text with lang_code '{pipeline_lang_code}': '{text[:100]}{'...' if len(text) > 100 else ''}'"
             )
-            for result in pipeline(
-                text, voice=voice_path, speed=speed, model=self._model
-            ):
+            with self._pipeline_lock:
+                results = list(
+                    pipeline(
+                        text, voice=voice_path, speed=speed, model=self._model
+                    )
+                )
+
+            for result in results:
                 if result.audio is not None:
                     logger.debug(f"Got audio chunk with shape: {result.audio.shape}")
                     word_timestamps = None
