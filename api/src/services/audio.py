@@ -178,6 +178,7 @@ class AudioService:
                     audio_chunk, chunk_text, speed, is_last_chunk, normalizer
                 )
 
+            chunk_data = None
             # Write audio data first
             if len(audio_chunk.audio) > 0:
                 chunk_data = writer.write_chunk(audio_chunk.audio)

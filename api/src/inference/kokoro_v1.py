@@ -180,14 +180,9 @@ class KokoroV1(BaseModelBackend):
             logger.debug(
                 f"Generating audio from tokens with lang_code '{pipeline_lang_code}': '{tokens[:100]}{'...' if len(tokens) > 100 else ''}'"
             )
-            with self._pipeline_lock:
-                results = list(
-                    pipeline.generate_from_tokens(
-                        tokens=tokens, voice=voice_path, speed=speed, model=self._model
-                    )
-                )
-
-            for result in results:
+            for result in pipeline.generate_from_tokens(
+                tokens=tokens, voice=voice_path, speed=speed, model=self._model
+            ):
                 if result.audio is not None:
                     logger.debug(f"Got audio chunk with shape: {result.audio.shape}")
                     yield result.audio.numpy()
@@ -286,14 +281,9 @@ class KokoroV1(BaseModelBackend):
             logger.debug(
                 f"Generating audio for text with lang_code '{pipeline_lang_code}': '{text[:100]}{'...' if len(text) > 100 else ''}'"
             )
-            with self._pipeline_lock:
-                results = list(
-                    pipeline(
-                        text, voice=voice_path, speed=speed, model=self._model
-                    )
-                )
-
-            for result in results:
+            for result in pipeline(
+                text, voice=voice_path, speed=speed, model=self._model
+            ):
                 if result.audio is not None:
                     logger.debug(f"Got audio chunk with shape: {result.audio.shape}")
                     word_timestamps = None
