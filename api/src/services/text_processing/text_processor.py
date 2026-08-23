@@ -107,19 +107,22 @@ def get_sentence_info(
     is_chinese = lang_code.startswith("z") or re.search(r"[\u4e00-\u9fff]", text)
     if is_chinese:
         # Split using Chinese punctuation
-        sentences = re.split(r"([，。！？；])+", text)
+        parts = re.split(r"([，。！？；])", text)
     else:
-        sentences = re.split(r"([.!?;:])(?=\s|$)", text)
+        parts = re.split(r"([.!?;:])(?=\s|$)", text)
 
     results = []
-    for i in range(0, len(sentences), 2):
-        sentence = sentences[i].strip()
-        punct = sentences[i + 1] if i + 1 < len(sentences) else ""
-        if not sentence:
-            continue
-        full = sentence + punct
-        # Strip the full sentence to remove any leading/trailing spaces before processing
-        full = full.strip()
+    i = 0
+    while i < len(parts):
+        sentence = parts[i]
+        punct = ""
+        if i + 1 < len(parts):
+            punct = parts[i + 1]
+            i += 2
+        else:
+            i += 1
+
+        full = (sentence + punct).strip()
         if not full:  # Skip if empty after stripping
             continue
         tokens = process_text_chunk(full)

@@ -1,5 +1,6 @@
 import pytest
 
+from api.src.structures.schemas import NormalizationOptions
 from api.src.services.text_processing.text_processor import (
     get_sentence_info,
     process_text_chunk,
@@ -231,3 +232,19 @@ async def test_smart_split_with_two_pause():
     assert chunks[2][2] is None  # No pause
     assert "zero point five" in chunks[2][0]
     assert len(chunks[2][1]) > 0
+
+
+@pytest.mark.asyncio
+async def test_smart_split_no_duplication_across_chunks():
+    """Test that smart_split does not duplicate sentences across chunks for multi-sentence inputs."""
+    sentences = [f"This is sentence alpha {i}." for i in range(1, 31)]
+    text = " ".join(sentences)
+
+    chunks = []
+    async for chunk_text, _, _ in smart_split(text, normalization_options=NormalizationOptions(normalize=False)):
+        chunks.append(chunk_text)
+
+    # Make sure every sentence appears exactly once across all yielded chunks
+    for s in sentences:
+        count = sum(s in chunk for chunk in chunks)
+        assert count == 1, f"Sentence '{s}' appeared {count} times across chunks!"
